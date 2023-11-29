@@ -1,0 +1,1086 @@
+---
+editor_options:
+  markdown:
+    wrap: 72
+output:
+  html_document:
+    df_print: paged
+---
+
+x--- title: "EDA" output: html_document: default word_document: default
+date: "2023-11-28" ---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+# Load packages for data manipulation
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(cowplot)
+library(dplyr)
+library(DT)
+library(GGally)
+library(cluster)
+library(factoextra) # for visualization
+library(mice)
+
+# Load data
+maindata <- read.csv("maindata.csv")
+data_monthly <- read.csv("data_monthly.csv")
+```
+
+
+```{r message=FALSE, warning=FALSE}
+#data preprocessing
+# Create a monthly date sequence from January 1990 to November 2023.
+dates <- seq(ymd("1990-01-01"), ymd("2023-11-01"), by = "1 month")
+
+# Assume maindata has been loaded into the environment. Now, add the date column.
+maindata <- maindata %>%
+  mutate(date = dates)
+
+
+# Remove variables with excessive missing values (NA)
+maindata <- maindata %>% select(-solarradiation, -uvindex)
+
+# Replace NA values with 0
+maindata <- maindata %>%
+  mutate(
+    Clear = replace(Clear, is.na(Clear), 0),
+    Overcast = replace(Overcast, is.na(Overcast), 0),
+    Partially.cloudy = replace(Partially.cloudy, is.na(Partially.cloudy), 0),
+    Rain..Partially.cloudy = replace(Rain..Partially.cloudy, is.na(Rain..Partially.cloudy), 0),
+    Rain..Overcast = replace(Rain..Overcast, is.na(Rain..Overcast), 0),
+    Rain = replace(Rain, is.na(Rain), 0)
+  )
+# Rename
+maindata <- maindata %>%
+  rename(
+    'Temperature' = temp,
+    'Humidity' = humidity,
+    'Wind Speed' =  windspeed ,
+    'Sea Level Pressure' = sealevelpressure,
+    'Cloud Cover' = cloudcover,
+    'Precipitation' = precip,
+    `Partially Cloudy` = Partially.cloudy,
+    `Rain & Partially Cloudy` = Rain..Partially.cloudy,
+    `Rain & Overcast` = Rain..Overcast
+  )
+```
+
+```
+The preprocessing involves creating a monthly date sequence from January 1990 to November 2023, which is then added to maindata. This dataset includes various weather-related variables like Temperature, Humidity,  Wind Speed , cloud cover, Sea Level Pressure, Precipitationitation and different conditions (Clear, Overcast, Partially cloudy,  Rain & Partially, Rain & Overcast, Rain).
+```
+
+## longtype
+```{r message=FALSE, warning=FALSE}
+
+# Melt the data into a long format suitable for ggplot2, excluding 'uvindex' and 'solarradiation' due to NaN values.
+maindata_long <- maindata %>%
+  gather(key = "variable", value = "value", -date) %>%
+  filter(!is.nan(value))
+```
+
+## Plot the annual mean Temperature
+```{r message=FALSE, warning=FALSE}
+# Assuming maindata_long is already created with the 'date' and 'value' columns
+# and the 'variable' column indicating the type of measurement, such as Temperature.
+
+# First, we will filter out Temperature-related variables only
+maindata_Temperature <- maindata_long %>%
+  filter(variable %in% c("Temperature")) # Replace with actual Temperature variable names
+
+# Extract the year from the date
+maindata_Temperature <- maindata_Temperature %>%
+  mutate(year = year(date))
+
+# Assuming maindata_long is already created with the 'date' and 'value' columns
+# and the 'variable' column indicating the type of measurement, such as Temperature.
+
+# First, we will filter out Temperature-related variables only
+maindata_Temperature <- maindata_long %>%
+  filter(variable %in% c("Temperature")) # Replace with actual Temperature variable names
+
+# Extract the year from the date
+maindata_Temperature <- maindata_Temperature %>%
+  mutate(year = year(date))
+
+# Calculate the annual mean Temperature
+annual_mean_Temperature <- maindata_Temperature %>%
+  group_by(year, variable) %>%
+  summarise(year_mean = mean(value, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the annual mean Temperature
+annual_mean_Temperature_plot <- annual_mean_Temperature %>%
+  filter(variable == "Temperature") %>% 
+  ggplot(aes(x = year, y = year_mean)) +
+  geom_point() +
+  geom_line() +
+  geom_smooth(method = "loess") +
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5) 
+  ) +
+  labs(
+    title = "Annual Mean Temperature",
+    subtitle = "Data from Jan. 1990 to Nov. 2023",
+    y = "Degrees Celsius"
+  ) +
+  NULL
+
+annual_mean_Temperature_plot
+```
+
+## Plot the monthly mean Temperature
+```{r message=FALSE, warning=FALSE}
+# Assuming maindata_long has already been created and includes the 'date' and 'value' columns
+# We'll use the 'Temperature' variable for plotting the mean Temperature
+
+# First, extract the year and month from the date
+maindata_Temperature <- maindata_long %>%
+  filter(variable == "Temperature") %>%
+  mutate(year = year(date), month = month(date, label = TRUE))
+
+# Calculate the monthly mean Temperature
+monthly_mean_Temperature <- maindata_Temperature %>%
+  group_by(year, month) %>%
+  summarise(month_mean = mean(value, na.rm = TRUE)) %>%
+  ungroup()
+
+# Define a colour scale for the months
+my_colour <- scales::hue_pal()(12)
+
+# Plot the monthly mean Temperature
+Temperature_plot <- ggplot(monthly_mean_Temperature, aes(x = year, y = month_mean, colour = month)) +
+  geom_point(size = 0.5) +
+  geom_smooth(method = "loess") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.title.x = element_blank(),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, face = "bold"), 
+    plot.subtitle = element_text(hjust = 0.5) 
+  ) +
+  scale_color_manual(values = my_colour) +
+  labs(
+    title = "Monthly Mean Temperature",
+    subtitle = "Data from Jan. 1990 to Nov. 2023",
+    y = "Degrees Celsius"
+  ) +
+  facet_wrap(~month) +
+  NULL
+
+Temperature_plot
+```
+
+## Plot the annual mean Humidity
+```{r message=FALSE, warning=FALSE}
+maindata_Humidity<- maindata_long %>%
+  filter(variable %in% c("Humidity")) 
+
+# Extract the year from the date
+maindata_Humidity <- maindata_Humidity %>%
+  mutate(year = year(date))
+
+# First, we will filter out Temperature-related variables only
+maindata_Humidity <- maindata_long %>%
+  filter(variable %in% c("Humidity")) 
+
+# Extract the year from the date
+maindata_Humidity <- maindata_Humidity %>%
+  mutate(year = year(date))
+
+# Calculate the annual mean Humidity
+annual_mean_Humidity <- maindata_Humidity %>%
+  group_by(year, variable) %>%
+  summarise(year_mean = mean(value, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the annual mean Humidity with the title and subtitle centered
+annual_mean_Humidity_plot <- annual_mean_Humidity %>%
+  filter(variable == "Humidity") %>% 
+  ggplot(aes(x = year, y = year_mean)) +
+  geom_point() +
+  geom_line() +
+  geom_smooth(method = "loess") +
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, face = "bold"), 
+    plot.subtitle = element_text(hjust = 0.5) 
+  ) +
+  labs(
+    title = "Annual Mean Humidity",
+    subtitle = "Data from Jan. 1990 to Nov. 2023",
+    y = "%"
+  ) +
+  NULL
+
+annual_mean_Humidity_plot
+```
+
+## Plot the monthly mean Humidity
+```{r message=FALSE, warning=FALSE}
+# First, extract the year and month from the date
+maindata_Humidity <- maindata_long %>%
+  filter(variable == "Humidity") %>%
+  mutate(year = year(date), month = month(date, label = TRUE))
+
+# Calculate the monthly mean Temperature
+monthly_mean_Humidity <- maindata_Humidity %>%
+  group_by(year, month) %>%
+  summarise(month_mean = mean(value, na.rm = TRUE)) %>%
+  ungroup()
+
+# Define a colour scale for the months
+my_colour <- scales::hue_pal()(12)
+
+# Plot the monthly mean Temperature
+Humidity_plot <- ggplot(monthly_mean_Humidity, aes(x = year, y = month_mean, colour = month)) +
+  geom_point(size = 0.5) +
+  geom_smooth(method = "loess") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.title.x = element_blank(),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, face = "bold"), 
+    plot.subtitle = element_text(hjust = 0.5) 
+  ) +
+  scale_color_manual(values = my_colour) +
+  labs(
+    title = "Monthly Mean Humidity",
+    subtitle = "Data from Jan. 1990 to Nov. 2023",
+    y = "Degrees Celsius"
+  ) +
+  facet_wrap(~month) +
+  NULL
+
+Humidity_plot
+```
+
+## Plot the annual mean Wind Speed 
+```{r message=FALSE, warning=FALSE}
+maindata_WindSpeed <- maindata_long %>%
+  filter(variable %in% c("Wind Speed")) 
+
+# Extract the year from the date
+maindata_WindSpeed  <- maindata_WindSpeed  %>%
+  mutate(year = year(date))
+
+# First, we will filter out Temperature-related variables only
+maindata_WindSpeed  <- maindata_long %>%
+  filter(variable %in% c("Wind Speed")) 
+
+# Extract the year from the date
+maindata_WindSpeed  <- maindata_WindSpeed  %>%
+  mutate(year = year(date))
+
+# Calculate the annual mean Humidity
+annual_mean_WindSpeed  <- maindata_WindSpeed  %>%
+  group_by(year, variable) %>%
+  summarise(year_mean = mean(value, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the annual mean  Wind Speed  with the title and subtitle centered
+annual_mean_WindSpeed_plot <- annual_mean_WindSpeed  %>%
+  filter(variable == "Wind Speed") %>% 
+  ggplot(aes(x = year, y = year_mean)) +
+  geom_point() +
+  geom_line() +
+  geom_smooth(method = "loess") +
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5) 
+  ) +
+  labs(
+    title = "Annual Mean Wind Speed",
+    subtitle = "Data from Jan. 1990 to Nov. 2023",
+    y = "Kilometers per hour (kph) "
+  ) +
+  NULL
+
+annual_mean_WindSpeed_plot
+```
+
+## Plot the monthly mean  Wind Speed 
+```{r message=FALSE, warning=FALSE}
+# First, extract the year and month from the date
+maindata_WindSpeed<- maindata_long %>%
+  filter(variable == "Wind Speed") %>%
+  mutate(year = year(date), month = month(date, label = TRUE))
+
+# Calculate the monthly mean Temperature
+monthly_mean_WindSpeed  <- maindata_WindSpeed  %>%
+  group_by(year, month) %>%
+  summarise(month_mean = mean(value, na.rm = TRUE)) %>%
+  ungroup()
+
+# Define a colour scale for the months
+my_colour <- scales::hue_pal()(12)
+
+# Plot the monthly mean Wind Speed
+ WindSpeed_plot <- ggplot(monthly_mean_WindSpeed , aes(x = year, y = month_mean, colour = month)) +
+  geom_point(size = 0.5) +
+  geom_smooth(method = "loess") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.title.x = element_blank(),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, face = "bold"), 
+    plot.subtitle = element_text(hjust = 0.5) 
+  ) +
+  scale_color_manual(values = my_colour) +
+  labs(
+    title = "Monthly Mean Wind Speed",
+    subtitle = "Data from Jan. 1990 to Nov. 2023",
+    y = "Kilometers per hour (kph) "
+  ) +
+  facet_wrap(~month) +
+  NULL
+
+ WindSpeed_plot
+```
+
+## Plot the annual mean Cloud Cover
+```{r message=FALSE, warning=FALSE}
+maindata_CloudCover<- maindata_long %>%
+  filter(variable %in% c("Cloud Cover")) 
+
+# Extract the year from the date
+maindata_CloudCover <- maindata_CloudCover %>%
+  mutate(year = year(date))
+
+# First, we will filter out Temperature-related variables only
+maindata_CloudCover <- maindata_long %>%
+  filter(variable %in% c("Cloud Cover")) 
+
+# Extract the year from the date
+maindata_CloudCover <- maindata_CloudCover %>%
+  mutate(year = year(date))
+
+# Calculate the annual mean Cloud Cover
+annual_mean_CloudCover <- maindata_CloudCover %>%
+  group_by(year, variable) %>%
+  summarise(year_mean = mean(value, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the annual mean Cloud Cover with the title and subtitle centered
+annual_mean_CloudCover_plot <- annual_mean_CloudCover %>%
+  filter(variable == "Cloud Cover") %>% 
+  ggplot(aes(x = year, y = year_mean)) +
+  geom_point() +
+  geom_line() +
+  geom_smooth(method = "loess") +
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, face = "bold"), 
+    plot.subtitle = element_text(hjust = 0.5) 
+  ) +
+  labs(
+    title = "Annual Mean Cloud Cover",
+    subtitle = "Data from Jan. 1990 to Nov. 2023",
+    y = "% "
+  ) +
+  NULL
+
+annual_mean_CloudCover_plot
+```
+
+## Plot the monthly mean Cloud Cover
+```{r message=FALSE, warning=FALSE}
+# First, extract the year and month from the date
+maindata_CloudCover <- maindata_long %>%
+  filter(variable == "Cloud Cover") %>%
+  mutate(year = year(date), month = month(date, label = TRUE))
+
+# Calculate the monthly mean Temperature
+monthly_mean_CloudCover <- maindata_CloudCover %>%
+  group_by(year, month) %>%
+  summarise(month_mean = mean(value, na.rm = TRUE)) %>%
+  ungroup()
+
+# Define a colour scale for the months
+my_colour <- scales::hue_pal()(12)
+
+# Plot the monthly mean Temperature
+CloudCover_plot <- ggplot(monthly_mean_CloudCover, aes(x = year, y = month_mean, colour = month)) +
+  geom_point(size = 0.5) +
+  geom_smooth(method = "loess") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.title.x = element_blank(),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5)
+  ) +
+  scale_color_manual(values = my_colour) +
+  labs(
+    title = "Monthly Mean Cloud Cover",
+    subtitle = "Data from 1990 - 2023",
+    y = "%"
+  ) +
+  facet_wrap(~month) +
+  NULL
+
+CloudCover_plot
+```
+
+## Plot the annual mean Sea Level Pressure
+```{r message=FALSE, warning=FALSE}
+maindata_SeaLevelPressure<- maindata_long %>%
+  filter(variable %in% c("Sea Level Pressure")) 
+
+# Extract the year from the date
+maindata_SeaLevelPressure <- maindata_SeaLevelPressure %>%
+  mutate(year = year(date))
+
+# First, we will filter out Temperature-related variables only
+maindata_SeaLevelPressure <- maindata_long %>%
+  filter(variable %in% c("Sea Level Pressure")) 
+
+# Extract the year from the date
+maindata_SeaLevelPressure <- maindata_SeaLevelPressure %>%
+  mutate(year = year(date))
+
+# Calculate the annual mean Humidity
+annual_mean_SeaLevelPressure <- maindata_SeaLevelPressure %>%
+  group_by(year, variable) %>%
+  summarise(year_mean = mean(value, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the annual mean Sea Level Pressure with the title and subtitle centered
+annual_mean_SeaLevelPressure_plot <- annual_mean_SeaLevelPressure %>%
+  filter(variable == "Sea Level Pressure") %>% 
+  ggplot(aes(x = year, y = year_mean)) +
+  geom_point() +
+  geom_line() +
+  geom_smooth(method = "loess") +
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, face = "bold"), 
+    plot.subtitle = element_text(hjust = 0.5) 
+  ) +
+  labs(
+    title = "Annual Mean Sea Level Pressure",
+    subtitle = "Data from Jan. 1990 to Nov. 2023",
+    y = "Millibars (mb)"
+  ) +
+  NULL
+
+annual_mean_SeaLevelPressure_plot
+```
+
+## Plot the monthly mean Sea Level Pressure
+```{r message=FALSE, warning=FALSE}
+# First, extract the year and month from the date
+maindata_SeaLevelPressure <- maindata_long %>%
+  filter(variable == "Sea Level Pressure") %>%
+  mutate(year = year(date), month = month(date, label = TRUE))
+
+# Calculate the monthly mean Temperature
+monthly_mean_SeaLevelPressure <- maindata_SeaLevelPressure %>%
+  group_by(year, month) %>%
+  summarise(month_mean = mean(value, na.rm = TRUE)) %>%
+  ungroup()
+
+# Define a colour scale for the months
+my_colour <- scales::hue_pal()(12)
+
+# Plot the monthly mean Temperature
+SeaLevelPressure_plot <- ggplot(monthly_mean_SeaLevelPressure, aes(x = year, y = month_mean, colour = month)) +
+  geom_point(size = 0.5) +
+  geom_smooth(method = "loess") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.title.x = element_blank(),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5)
+  ) +
+  scale_color_manual(values = my_colour) +
+  labs(
+    title = "Monthly Mean Sea Level Pressure",
+    subtitle = "Data from Jan. 1990 to Nov. 2023",
+    y = "Millibars (mb)"
+  ) +
+  facet_wrap(~month) +
+  NULL
+
+SeaLevelPressure_plot
+```
+
+## Plot the annual mean Precipitation
+```{r message=FALSE, warning=FALSE}
+maindata_Precipitation<- maindata_long %>%
+  filter(variable %in% c("Precipitation")) 
+
+# Extract the year from the date
+maindata_Precipitation <- maindata_Precipitation %>%
+  mutate(year = year(date))
+
+# First, we will filter out Temperature-related variables only
+maindata_Precipitation <- maindata_long %>%
+  filter(variable %in% c("Precipitation")) 
+
+# Extract the year from the date
+maindata_Precipitation <- maindata_Precipitation %>%
+  mutate(year = year(date))
+
+# Calculate the annual mean Humidity
+annual_mean_Precipitation <- maindata_Precipitation %>%
+  group_by(year, variable) %>%
+  summarise(year_mean = mean(value, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the annual mean Precipitation with the title and subtitle centered
+annual_mean_Precipitation_plot <- annual_mean_Precipitation %>%
+  filter(variable == "Precipitation") %>% 
+  ggplot(aes(x = year, y = year_mean)) +
+  geom_point() +
+  geom_line() +
+  geom_smooth(method = "loess") +
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, face = "bold"), 
+    plot.subtitle = element_text(hjust = 0.5) 
+  ) +
+  labs(
+    title = "Annual Mean Precipitationitation",
+    subtitle = "Data from Jan. 1990 to Nov. 2023",
+    y = "mm"
+  ) +
+  NULL
+
+annual_mean_Precipitation_plot
+```
+
+## Plot the monthly mean Precipitation
+```{r message=FALSE, warning=FALSE}
+# First, extract the year and month from the date
+maindata_Precipitation <- maindata_long %>%
+  filter(variable == "Precipitation") %>%
+  mutate(year = year(date), month = month(date, label = TRUE))
+
+# Calculate the monthly mean Temperature
+monthly_mean_Precipitation <- maindata_Precipitation %>%
+  group_by(year, month) %>%
+  summarise(month_mean = mean(value, na.rm = TRUE)) %>%
+  ungroup()
+
+# Define a colour scale for the months
+my_colour <- scales::hue_pal()(12)
+
+# Plot the monthly mean Temperature
+Precipitation_plot <- ggplot(monthly_mean_Precipitation, aes(x = year, y = month_mean, colour = month)) +
+  geom_point(size = 0.5) +
+  geom_smooth(method = "loess") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.title.x = element_blank(),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5)
+  ) +
+  scale_color_manual(values = my_colour) +
+  labs(
+    title = "Monthly Precipitationitation",
+    subtitle = "Data from Jan. 1990 to Nov. 2023",
+    y = "mm"
+  ) +
+  facet_wrap(~month) +
+  NULL
+
+Precipitation_plot
+```
+
+
+## Plot the annual mean conditions: 'Clear', 'Overcast', 'Partially cloudy','Rain & Partially cloudy', 'Rain & Overcast', 'Rain'
+```{r message=FALSE, warning=FALSE}
+# First, we will filter out condition-related variables only
+maindata_condition <- maindata_long %>% 
+  filter(variable %in% 
+           c("Clear","Overcast","Partially Cloudy", 
+             "Rain & Partially Cloudy", "Rain & Overcast", "Rain")) 
+
+
+# Extract the year from the date
+maindata_condition <- maindata_condition %>%
+  mutate(year = year(date))
+
+# Calculate the annual mean frequency
+annual_mean_condition <- maindata_condition %>%
+  group_by(year, variable) %>%
+  summarise(year_mean = mean(value, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot the annual mean frequency with the title and subtitle centered
+annual_mean_condition_plot <- annual_mean_condition %>%
+  ggplot(aes(x = year, y = year_mean)) +
+  geom_point() +
+  geom_line() +
+  geom_smooth(method = "loess") +
+  facet_wrap(~variable) + 
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, face = "bold"), 
+    plot.subtitle = element_text(hjust = 0.5) 
+  ) +
+  labs(
+    title = "Annual Mean Frequency of Weather Condition",
+    subtitle = "Data from Jan. 1990 to Nov. 2023",
+    y = "Count"
+  ) +
+  NULL
+
+annual_mean_condition_plot
+```
+
+
+## Plot the monthly mean conditions:
+```{r message=FALSE, warning=FALSE}
+# First, extract the year and month from the date
+maindata_condition <- maindata_long %>% 
+  filter(variable %in% 
+           c("Clear","Overcast","Partially Cloudy", 
+             "Rain & Partially Cloudy", "Rain & Overcast", "Rain")) %>% 
+  mutate(year = year(date), month = month(date, label = TRUE))
+
+# Calculate the monthly mean frequency
+monthly_mean_condition <- maindata_condition %>%
+  group_by(variable, year, month) %>%
+  summarise(month_mean = mean(value, na.rm = TRUE)) %>%
+  ungroup()
+
+# Define a colour scale for the months
+my_colour <- scales::hue_pal()(12)
+
+# Plot 
+condition_plot <- ggplot(monthly_mean_condition, aes(x = year, y = month_mean, colour = month)) +
+  geom_point(size = 0.5) +
+  geom_smooth(method = "loess") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.title.x = element_blank(),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5)
+  ) +
+  scale_color_manual(values = my_colour) +
+  labs(
+    title = "Monthly Frequency of Weather Condition",
+    subtitle = "Data from Jan. 1990 to Nov. 2023",
+    y = "Count"
+  ) +
+  facet_grid(variable~month) +
+  NULL
+
+condition_plot
+```
+
+
+## Boxplot: Temperature
+```{r message=FALSE, warning=FALSE}
+Temperature_data <- maindata_long %>%
+  filter(variable == "Temperature") %>%
+  mutate(month = factor(month(date, label = TRUE)))  # Converting the date to a month factor
+
+# Creating the boxplot for each month
+Temperature_boxplot <- ggplot(Temperature_data, aes(x = month, y = value)) +
+  geom_boxplot() +
+  labs(title = "Monthly Boxplots of Temperature",
+       subtitle = "Data from Jan. 1990 to Nov. 2023",
+       x = "Month",
+       y = "Degrees Celsius") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5))
+
+print(Temperature_boxplot)
+```
+
+## Boxplot: Temperature with outlier
+```{r message=FALSE, warning=FALSE}
+
+Temperature_data <- maindata_long %>%
+  filter(variable == "Temperature") %>%
+  mutate(year = as.character(year(date)),
+         month = factor(month(date, label = TRUE)))
+
+outliers <- Temperature_data %>%
+  group_by(month) %>%
+  summarise(lower = quantile(value, 0.25) - 1.5 * IQR(value),
+            upper = quantile(value, 0.75) + 1.5 * IQR(value)) %>%
+  left_join(Temperature_data, by = "month") %>%
+  filter(value < lower | value > upper)
+
+Temperature_boxplot_outlier <- ggplot(Temperature_data, aes(x = month, y = value)) +
+  geom_boxplot() +
+  geom_text(data = outliers, aes(label = year), vjust = -0.5) +
+  labs(title = "Monthly Boxplots of Temperature",
+       subtitle = "Data from Jan. 1990 to Nov. 2023",
+       x = "Month",
+       y = "Degrees Celsius") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5))
+
+print(Temperature_boxplot_outlier)
+```
+
+## Boxplot: Humidity
+```{r message=FALSE, warning=FALSE}
+
+Humidity_data <- maindata_long %>%
+  filter(variable == "Humidity") %>%
+  mutate(month = factor(month(date, label = TRUE)))  # Converting the date to a month factor
+
+# Creating the boxplot for each month
+Humidity_boxplot <- ggplot(Humidity_data, aes(x = month, y = value)) +
+  geom_boxplot() +
+  labs(title = "Monthly Boxplots of Humidity",
+       subtitle = "Data from Jan. 1990 to Nov. 2023",
+       x = "Month",
+       y = "%") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5))
+
+print(Humidity_boxplot)
+```
+## Boxplot: Humidity with outlier
+```{r message=FALSE, warning=FALSE}
+
+Humidity_data <- maindata_long %>%
+  filter(variable == "Humidity") %>%
+  mutate(year = as.character(year(date)),
+         month = factor(month(date, label = TRUE)))
+
+outliers <- Humidity_data %>%
+  group_by(month) %>%
+  summarise(lower = quantile(value, 0.25) - 1.5 * IQR(value),
+            upper = quantile(value, 0.75) + 1.5 * IQR(value)) %>%
+  left_join(Humidity_data, by = "month") %>%
+  filter(value < lower | value > upper)
+
+Humidity_boxplot_outlier <- ggplot(Humidity_data, aes(x = month, y = value)) +
+  geom_boxplot() +
+  geom_text(data = outliers, aes(label = year), vjust = -0.5) +
+  labs(title = "Monthly Boxplots of Humidity",
+       subtitle = "Data from Jan. 1990 to Nov. 2023",
+       x = "Month",
+       y = "%") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5))
+
+print(Humidity_boxplot_outlier)
+```
+
+## Boxplot:  Wind Speed 
+```{r message=FALSE, warning=FALSE}
+
+ WindSpeed_data <- maindata_long %>%
+  filter(variable == "Wind Speed") %>%
+  mutate(month = factor(month(date, label = TRUE)))  # Converting the date to a month factor
+
+# Creating the boxplot for each month
+ WindSpeed_boxplot <- ggplot( WindSpeed_data, aes(x = month, y = value)) +
+  geom_boxplot() +
+  labs(title = "Monthly Boxplots of Wind Speed",
+       subtitle = "Data from Jan. 1990 to Nov. 2023",
+       x = "Month",
+       y = "Kilometers per hour (kph)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5))
+
+print(WindSpeed_boxplot)
+```
+
+## Boxplot:  Wind Speed  with outlier
+```{r message=FALSE, warning=FALSE}
+
+ WindSpeed_data <- maindata_long %>%
+  filter(variable == "Wind Speed") %>%
+  mutate(year = as.character(year(date)),
+         month = factor(month(date, label = TRUE)))
+
+outliers <-  WindSpeed_data %>%
+  group_by(month) %>%
+  summarise(lower = quantile(value, 0.25) - 1.5 * IQR(value),
+            upper = quantile(value, 0.75) + 1.5 * IQR(value)) %>%
+  left_join( WindSpeed_data, by = "month") %>%
+  filter(value < lower | value > upper)
+
+ WindSpeed_boxplot_outlier <- ggplot( WindSpeed_data, aes(x = month, y = value)) +
+  geom_boxplot() +
+  geom_text(data = outliers, aes(label = year), vjust = -0.5) +
+  labs(title = "Monthly Boxplots of Wind Speed",
+       subtitle = "Data from Jan. 1990 to Nov. 2023",
+       x = "Month",
+       y = "Kilometers per hour (kph)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5))
+
+print(WindSpeed_boxplot_outlier)
+```
+
+## Boxplot: Cloud Cover
+```{r message=FALSE, warning=FALSE}
+CloudCover_data <- maindata_long %>%
+  filter(variable == "Cloud Cover") %>%
+  mutate(month = factor(month(date, label = TRUE)))  # Converting the date to a month factor
+
+# Creating the boxplot for each month
+CloudCover_boxplot <- ggplot(CloudCover_data, aes(x = month, y = value)) +
+  geom_boxplot() +
+  labs(title = "Monthly Boxplots of Cloud Cover",
+       subtitle = "Data from Jan. 1990 to Nov. 2023",
+       x = "Month",
+       y = "%") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5))
+
+print(CloudCover_boxplot)
+```
+
+## Boxplot: Cloud Cover with outlier
+```{r message=FALSE, warning=FALSE}
+
+CloudCover_data <- maindata_long %>%
+  filter(variable == "Cloud Cover") %>%
+  mutate(year = as.character(year(date)),
+         month = factor(month(date, label = TRUE)))
+
+outliers <- CloudCover_data %>%
+  group_by(month) %>%
+  summarise(lower = quantile(value, 0.25) - 1.5 * IQR(value),
+            upper = quantile(value, 0.75) + 1.5 * IQR(value)) %>%
+  left_join(CloudCover_data, by = "month") %>%
+  filter(value < lower | value > upper)
+
+CloudCover_boxplot_outlier <- ggplot(CloudCover_data, aes(x = month, y = value)) +
+  geom_boxplot() +
+  geom_text(data = outliers, aes(label = year), vjust = -0.5) +
+  labs(title = "Monthly Boxplots of Cloud Cover",
+       subtitle = "Data from Jan. 1990 to Nov. 2023",
+       x = "Month",
+       y = "%") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5))
+
+print(CloudCover_boxplot_outlier)
+```
+
+## Boxplot: Sea Level Pressure
+```{r message=FALSE, warning=FALSE}
+SeaLevelPressure_data <- maindata_long %>%
+  filter(variable == "Sea Level Pressure") %>%
+  mutate(month = factor(month(date, label = TRUE)))  # Converting the date to a month factor
+
+# Creating the boxplot for each month
+SeaLevelPressure_boxplot <- ggplot(SeaLevelPressure_data, aes(x = month, y = value)) +
+  geom_boxplot() +
+  labs(title = "Monthly Boxplots of Sea Level Pressure",
+       subtitle = "Data from Jan. 1990 to Nov. 2023",
+       x = "Month",
+       y = "Millibars (mb)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5))
+
+print(SeaLevelPressure_boxplot)
+```
+
+## Boxplot: Sea Level Pressure with outlier
+```{r message=FALSE, warning=FALSE}
+
+SeaLevelPressure_data <- maindata_long %>%
+  filter(variable == "Sea Level Pressure") %>%
+  mutate(year = as.character(year(date)),
+         month = factor(month(date, label = TRUE)))
+
+outliers <- SeaLevelPressure_data %>%
+  group_by(month) %>%
+  summarise(lower = quantile(value, 0.25) - 1.5 * IQR(value),
+            upper = quantile(value, 0.75) + 1.5 * IQR(value)) %>%
+  left_join(SeaLevelPressure_data, by = "month") %>%
+  filter(value < lower | value > upper)
+
+SeaLevelPressure_boxplot_outlier <- ggplot(SeaLevelPressure_data, aes(x = month, y = value)) +
+  geom_boxplot() +
+  geom_text(data = outliers, aes(label = year), vjust = -0.5) +
+  labs(title = "Monthly Boxplots of Sea Level Pressure",
+       subtitle = "Data from Jan. 1990 to Nov. 2023",
+       x = "Month",
+       y = "Millibars (mb)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5))
+
+print(SeaLevelPressure_boxplot_outlier)
+```
+
+## Boxplot: Precipitation
+```{r message=FALSE, warning=FALSE}
+Precipitation_data <- maindata_long %>%
+  filter(variable == "Precipitation") %>%
+  mutate(month = factor(month(date, label = TRUE)))  # Converting the date to a month factor
+
+# Creating the boxplot for each month
+Precipitation_boxplot <- ggplot(Precipitation_data, aes(x = month, y = value)) +
+  geom_boxplot() +
+  labs(title = "Monthly Boxplots of Precipitation",
+       subtitle = "Data from Jan. 1990 to Nov. 2023",
+       x = "Month",
+       y = "mm") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5))
+
+print(Precipitation_boxplot)
+```
+
+## Boxplot: Precipitation with Precipitation
+```{r message=FALSE, warning=FALSE}
+
+Precipitation_data <- maindata_long %>%
+  filter(variable == "Precipitation") %>%
+  mutate(year = as.character(year(date)),
+         month = factor(month(date, label = TRUE)))
+
+outliers <- Precipitation_data %>%
+  group_by(month) %>%
+  summarise(
+    lower = quantile(value, 0.25, na.rm = TRUE) - 1.5 * IQR(value, na.rm = TRUE),
+    upper = quantile(value, 0.75, na.rm = TRUE) + 1.5 * IQR(value, na.rm = TRUE)
+  ) %>%
+  left_join(Precipitation_data, by = "month") %>%
+  filter(value < lower | value > upper)
+
+
+Precipitation_boxplot_outlier <- ggplot(Precipitation_data, aes(x = month, y = value)) +
+  geom_boxplot() +
+  geom_text(data = outliers, aes(label = year), vjust = -0.5) +
+  labs(title = "Monthly Boxplots of Precipitation",
+       subtitle = "Data from Jan. 1990 to Nov. 2023",
+       x = "Month",
+       y = "mm") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5))
+
+print(Precipitation_boxplot_outlier)
+```
+
+
+# Yearly Basic Statistics Table (excluding the condition variables)
+# feture: Temperature, Humidity,  Wind Speed , Cloud Cover, Sea Level Pressure, Precipitation
+# If you want to summarize the data by month instead of by year, you can add 'group_by(year, month)'
+
+```{r message=FALSE, warning=FALSE}
+library(DT)
+maindata %>% 
+    mutate(year = year(date), month = month(date, label = TRUE)) -> data_summary
+
+data_summary %>%
+  select('year', 'Temperature', 'Humidity', 'Wind Speed', 'Cloud Cover', 'Sea Level Pressure', 'Precipitation') %>% 
+  group_by(year) %>%
+  summarise(across(everything(), 
+                   list(min = ~min(., na.rm = TRUE), 
+                       max = ~max(., na.rm = TRUE), 
+                       mean = ~mean(., na.rm = TRUE)))) %>%
+  mutate_all(~round(., 3)) -> datatable1
+
+datatable(datatable1, options = list(autoWidth = FALSE, scrollX = TRUE))
+
+```
+
+# Yearly Basic Statistics Table (only the condition variables)
+# If you want to summarize the data by month instead of by year, you can add 'group_by(year, month)'
+```{r message=FALSE, warning=FALSE}
+data_summary %>% 
+    select(Clear:month) %>%
+    group_by(year) %>%
+    summarise_at(vars(Clear:Rain), 
+                      list(min = ~min(., na.rm = TRUE), 
+                           max = ~max(., na.rm = TRUE), 
+                           mean = ~mean(., na.rm = TRUE))) %>%
+  mutate_all(~ifelse(is.finite(.), ., NA)) %>% 
+  mutate_all(~round(., 3)) -> datatable2
+
+datatable(datatable2, options = list(autoWidth = FALSE, scrollX = TRUE))
+
+```
+
+# Yearly Basic Statistics Table
+# If you want to summarize the data by month instead of by year, you can add 'group_by(year, month)'
+```{r message=FALSE, warning=FALSE}
+
+# Joining the two tables on the 'year' column
+final_table <- left_join(datatable1, datatable2, by = "year")
+
+# Displaying the combined table
+datatable(final_table, options = list(autoWidth = FALSE, scrollX = TRUE))
+
+```
+
+
+#Excluding the variables 'Clear', 'Overcast', 'Partially Cloudy', 'Rain & Partially Cloudy', 'Rain & Overcast', 'Rain', as they make the data look too messy. Should I add them back?
+# If you want to summarize the data by month instead of by year, you can add 'group_by(year, month)'
+```{r message=FALSE, warning=FALSE}
+# heatmap(Excluding the 'Clear', 'Overcast', 'Partially Cloudy','Rain & Partially Cloudy', 'Rain & Overcast', 'Rain')
+data_summary %>%
+  select('Temperature', 'Humidity', 'Wind Speed', 'Cloud Cover', 'Sea Level Pressure', 'Precipitation') -> cordata
+
+library(GGally)
+ggpairs(cordata)
+
+cordata %>%
+  cor(use = "complete.obs") -> cor_matrix
+
+heatmap(cor_matrix, Colv=NA, Rowv = NA, scale = "column") 
+
+library(corrplot)
+corrplot(cor_matrix, method = 'color', type = 'lower', order = 'hclust',
+         tl.col = 'black', addCoef.col = 'black', number.cex = 0.6,
+         cl.ratio = 0.2, tl.srt = 45, col = COL2('RdBu', 10))
+
+
+## leave blank on non-significant coefficient
+## add significant correlation coefficients
+testRes = cor.mtest(cordata, conf.level = 0.95)
+
+corrplot(cor_matrix, p.mat = testRes$p, 
+         method = 'color', type = 'lower', insig='blank',
+         tl.col = 'black', addCoef.col = 'black', number.cex = 0.6,
+         order = 'AOE', diag=FALSE)
+```
+
