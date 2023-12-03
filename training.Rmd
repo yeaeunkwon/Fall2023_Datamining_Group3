@@ -1,0 +1,254 @@
+---
+title: "weather-forecast"
+author: "Group 3"
+date: "2023-11-30"
+output: html_document
+---
+
+```{r load-packages, message = FALSE}
+if (!require(pacman))
+  install.packages(pacman)
+
+pacman::p_load(forcats,tidyverse, dplyr, ggplot2, keras, tensorflow, caret, reticulate)
+```
+
+```{r warning=FALSE}
+#| label: load dataset
+data <- read_csv("data/maindata.csv")
+#view(data)
+
+monthly_data <- read_csv("data/data_monthly.csv")
+view(monthly_data)
+#head(monthly_data)
+```
+
+
+```{r}
+#| label: data preprocessing
+# Preprocess the data: Remove NAs and skip unwanted columns
+#cleaned_data <- na.omit(monthly_data)  # Remove rows with NAs
+cleaned_data <- monthly_data[, !names(monthly_data) %in% c("...1","tempmax", "tempmin", "feelslikemax","feelslikemin","solarradiation", "solarenergy", "uvindex", "severerisk", "snowdepth", "snow" )]  # remove few columns
+
+view(cleaned_data)
+
+# Replace NAs with 0 (if needed)
+cleaned_data[is.na(cleaned_data)] <- 0
+
+glimpse(cleaned_data)
+```
+
+
+```{r}
+#| label: data Normalization
+# Normalize the data (scaling to a range of [0,1])
+normalize_col <- c("winddir", "sealevelpressure", "sunset_time") 
+
+cleaned_data[normalize_col] <- scale(cleaned_data[normalize_col])
+view(cleaned_data)
+```
+
+
+```{r}
+#| label: Split data into test, train and validation
+# Split the data into train, validation, and test sets
+split <- sample(1:nrow(cleaned_data), size = 0.7 * nrow(cleaned_data))
+train_data <- cleaned_data[split, ]
+test_val_data <- cleaned_data[-split, ]
+split_val <- sample(1:nrow(test_val_data), size = 0.5 * nrow(test_val_data))
+validation_data <- test_val_data[split_val, ]
+test_data <- test_val_data[-split_val, ]
+
+#train data
+glimpse(train_data)
+#test data
+glimpse(test_data)
+#validation data
+glimpse(validation_data)
+```
+
+
+```{r}
+#| label: CNN- Convolutional Neural Network model
+install.packages("reticulate")
+# Define input shape based on the number of features in your data
+input_shape <- ncol(train_data) - 1
+
+# Define the CNN architecture
+model <- keras_model_sequential() %>%
+  layer_dense(units = 64, activation = 'relu', input_shape = input_shape) %>%
+  layer_dense(units = 32, activation = 'relu') %>%
+  layer_dense(units = 1, activation = 'linear')  
+```
+
+
+```{r}
+# Compile the model
+model %>% compile(
+  loss = 'binary_crossentropy',
+  optimizer = optimizer_adam(),
+  metrics = c('accuracy')
+)
+```
+
+
+```{r}
+# Compile the model using legacy adam optimizer
+optimizer <- keras$optimizers$legacy$Adam(learning_rate = 0.001)
+model$compile(optimizer = optimizer, loss = "mean_squared_error", metrics = list())
+
+```
+
+
+```{r}
+# Train the model
+history <- model %>%
+  fit(
+    as.matrix(train_data[, -which(names(train_data) == "temp")]),  # Extract features except 'temp'
+    train_data$temp,  # Target variable 'temp'
+    epochs = 100,
+    batch_size = 8,
+    validation_split = 0.2,  # Use validation split
+    verbose = 1  # Set verbosity to 1 for progress display
+  )
+
+# Get MAE scores
+train_mae <- history$metrics$val_mean_absolute_error[[length(history$metrics$val_mean_absolute_error)]]
+val_mae <- history$metrics$mean_absolute_error[[length(history$metrics$mean_absolute_error)]]
+
+# Print MAE scores
+cat("Train MAE:", train_mae, "\n")
+cat("Validation MAE:", val_mae, "\n")
+
+# Plot training history (accuracy and loss over epochs)
+plot(history)
+```
+
+
+
+```{r}
+#| label: train the model
+
+train_y<-subset(train_data,select="temp")
+test_y<-subset(test_data,select="temp")
+valid_y<-subset(validation_data,select="temp")
+
+train_data_matrix<-matrix(unlist(train_data),ncol=length(train_data))
+dim(train_data_matrix)
+train_data<-setNames(train_data,c('lstm_1_input'))
+data_ncols<-ncol(train_data)
+train_y_array=unlist(train_y)
+typeof(train_y_array)
+
+
+valid_data_matrix<-matrix(unlist(validation_data),ncol=length(validation_data))
+valid_y_array=unlist(valid_y)
+
+test_data_matrix<-matrix(unlist(test_data),ncol=length(test_data))
+test_y_array=unlist(test_y)
+
+
+# Train the model
+history <- model %>%
+  fit(
+    train_data_matrix,
+    train_y_array,
+    epochs = 100,
+    batch_size = 8,
+    validation_split = 0.2,  # Use validation split
+    verbose = 1  # Set verbosity to 1 for progress display
+  )
+
+# Print the accuracy and loss
+print(history)
+
+# Alternatively, you can access individual metrics from the history object
+plot(history)  # Plot training history (accuracy and loss over epochs)
+
+
+
+
+
+
+```
+
+
+```{r}
+#| label: model plot
+# Plot the CNN model
+plot(model)
+```
+
+
+```{r}
+#| label: accuracy of the model
+# Evaluate model performance on test set
+evaluation <- model %>% evaluate(train_data_matrix, train_y_array)
+cat("Test Accuracy:", evaluation$accuracy)
+```
+
+
+```{r}
+library(keras)
+library(reticulate)
+
+# Define the Block class
+Block <- function(inChannels, outChannels) {
+  model <- keras_model_sequential()
+  model %>%
+    layer_conv_2d(filters = outChannels, kernel_size = c(3, 3), input_shape = c(NULL, NULL, inChannels)) %>%
+    layer_activation("relu") %>%
+    layer_conv_2d(filters = outChannels, kernel_size = c(3, 3))
+  return(model)
+}
+
+# Define the Encoder class
+Encoder <- function(channels) {
+  model <- keras_model_sequential()
+  for (i in 2:length(channels)) {
+    model <- model %>% Block(channels[i - 1], channels[i]) %>%
+      layer_max_pooling_2d(pool_size = c(2, 2))
+  }
+  return(model)
+}
+
+# Define the Decoder class
+Decoder <- function(channels) {
+  model <- keras_model_sequential()
+  for (i in 2:length(channels)) {
+    model <- model %>%
+      layer_conv_2d_transpose(channels[i - 1], channels[i], kernel_size = c(2, 2), strides = c(2, 2)) %>%
+      layer_activation("relu") %>%
+      layer_concatenate() %>%
+      Block(channels[i - 1] + channels[i], channels[i])
+  }
+  return(model)
+}
+
+# Define the UNet class
+UNet <- function(encChannels, decChannels, nbClasses, retainDim, outSize) {
+  encoder <- Encoder(encChannels)
+  decoder <- Decoder(decChannels)
+  head <- keras_model_sequential() %>% 
+    layer_conv_2d(filters = nbClasses, kernel_size = c(1, 1))
+  
+  model <- keras_model_sequential() %>%
+    encoder %>%
+    decoder %>%
+    head
+  
+  if (retainDim) {
+    model <- model %>%
+      layer_upsampling_2d(size = list(outSize[1] / 2, outSize[2] / 2))
+  }
+  
+  return(model)
+}
+
+# Create an instance of UNet
+model <- UNet(encChannels = c(3, 16, 32, 64), decChannels = c(64, 32, 16), nbClasses = 1, retainDim = TRUE, outSize = c(256, 256))
+
+# Display the model summary
+summary(model)
+
+```
+
