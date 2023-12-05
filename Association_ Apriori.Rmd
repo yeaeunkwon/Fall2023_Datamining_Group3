@@ -1,0 +1,50 @@
+---
+title: "Association"
+output: html_document
+date: "2023-12-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+file_path="C:/Users/권예은/Documents/Academic/Fall2023/Data mining/Final PJ/Fall2023_Datamining_Group3/data/maindata.csv"
+monthly_file_path="C:/Users/권예은/Documents/Academic/Fall2023/Data mining/Final PJ/Fall2023_Datamining_Group3/data/data_monthly.csv"
+data<-read.csv(file_path)
+monthly_data<-read.csv(monthly_file_path)
+```
+
+
+```{r}
+monthly_categorydf<-monthly_data[c("temp","humidity","precipprob","sealevelpressure","cloudcover")]
+monthly_categorydf$temp_category<-cut(monthly_data$temp, breaks=c(-Inf,15,20,25,30,Inf), labels=c("Cold","Chilly","Mild","Warm","Hot"), include.lowest=TRUE)
+monthly_categorydf$humidity_category<-cut(monthly_data$humidity,breaks=c(-Inf,20,30,40,50,Inf),labels=c("very low","low","moderate","high","very high"),include.lowest=TRUE)
+monthly_categorydf$precipprob_category<-cut(monthly_data$precipprob,breaks=c(-Inf,15,30,45,60,Inf),labels=c("very low","low","moderate","high","very high"),include.lowest=TRUE)
+monthly_categorydf$sealevelpressure_category<-cut(monthly_data$sealevelpressure,breaks=c(-Inf,1005,1010,1015,1020,Inf),labels=c("very low","low","moderate","high","very high"),include.lowest=TRUE)
+monthly_categorydf$cloudcover_category<-cut(monthly_data$cloudcover ,breaks=c(-Inf,15,30,45,60,Inf),labels=c("very weak","weak","moderate","strong","very strong"),include.lowest=TRUE)
+
+monthly_categorydf<- monthly_categorydf[, !names(monthly_categorydf) %in% c("temp","humidity","precipprob","sealevelpressure","cloudcover")]
+
+```
+```{r}
+library(arules)
+weather_transaction<-as(monthly_categorydf[,-1],"transactions")
+inspect(weather_transaction)
+rules<-apriori(weather_transaction,parameter=list(support=0.2,confidence=0.8,target="rules",minlen=2))
+
+inspect(rules)
+```
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+
