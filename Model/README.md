@@ -1,1 +1,1 @@
-### Prediction and Clustering Models
+### Prediction, Clustering, and Association Models
