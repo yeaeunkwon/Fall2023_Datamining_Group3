@@ -1,0 +1,65 @@
+---
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+x--- title: "Clusturing_DBSCAN" output: html_document: default word_document: default
+date: "2023-11-28" ---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+# Load packages for data manipulation
+library(factoextra)
+library(tidyverse)
+library(dbscan)
+
+# Load data
+maindata <- read.csv("maindata.csv")
+data_monthly <- read.csv("data_monthly.csv")
+```
+
+
+```{r message=FALSE, warning=FALSE}
+
+#
+maindata<- maindata %>% select("temp", "cloudcover","Clear", 
+                               "Overcast", "Partially.cloudy",
+                               "Rain..Partially.cloudy",
+                               "Rain..Overcast", "Rain")
+
+# Select numeric columns from 'maindata' for analysis
+numeric_data <- maindata[, sapply(maindata, is.numeric)]
+
+# Scale the numeric data, this is important for the DBSCAN algorithm
+numeric_data_scaled <- scale(numeric_data)
+# Remove columns with any missing values in the scaled data
+numeric_data_scaled <- numeric_data_scaled[, colSums(is.na(numeric_data_scaled)) == 0]
+
+# Display the structure of the scaled data
+str(numeric_data_scaled)
+
+# Select the first 8 columns from the scaled data for clustering
+df <- numeric_data_scaled[, 1:3]
+
+# Plot the selected data
+plot(df, main = "numeric_data_scaled")
+
+# Use k-NN distance plot to help determine the 'eps' parameter for DBSCAN
+dbscan::kNNdistplot(df, k = 3)
+
+# Set seed for reproducibility
+set.seed(1004)
+
+# Perform DBSCAN clustering
+db <- dbscan::dbscan(df, eps = 3, minPts = 16)
+
+# Visualize the clusters from DBSCAN
+fviz_cluster(db, df, stand = FALSE, frame = FALSE, geom = "point")
+```
+
+
+
