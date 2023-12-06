@@ -47,7 +47,7 @@ test_scale_data[,c("humidity","windspeed","cloudcover","sealevelpressure","preci
 
 
 #Making a model
-install.packages("keras")
+install.packages("/"{{}})
 install_keras()
 library(keras)
 install_tensorflow()

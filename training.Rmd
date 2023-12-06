@@ -64,6 +64,7 @@ glimpse(train_data)
 glimpse(test_data)
 #validation data
 glimpse(validation_data)
+
 ```
 
 
@@ -73,7 +74,7 @@ glimpse(validation_data)
 # Define input shape based on the number of features in your data
 input_shape <- ncol(train_data) - 1 # Excluding the target variable 'temp'
 
-# Define the CNN architecture
+# Define the NN architecture
 model <- keras_model_sequential() %>%
   layer_dense(units = 64, activation = 'relu', input_shape = input_shape) %>%
   layer_dense(units = 32, activation = 'relu') %>%
@@ -108,14 +109,15 @@ history <- model %>%
   fit(
     as.matrix(train_data[, -which(names(train_data) == "temp")]),  # Extract features except 'temp'
     train_data$temp,  # Target variable 'temp'
-    epochs = 600,
-    batch_size = 16,
+    epochs = 400,
+    batch_size = 32,
     validation_data = list(
       as.matrix(validation_data[, -which(names(validation_data) == "temp")]),
       validation_data$temp
     ),
     verbose = 1  # Set verbosity to 1 for progress display
   )
+
 
 print(history)
 plot(history)
@@ -137,11 +139,13 @@ cat("Validation MAE:", val_mae, "\n")
 predictions <- model %>% predict(as.matrix(test_data[, -which(names(test_data) == "temp")]))
 print("Predicted values:")
 print(predictions)
+write.csv(predictions, "predictions_400e32b.csv")
 
 # Evaluate model on test data
 evaluation <- model %>% evaluate(as.matrix(test_data[, -which(names(test_data) == "temp")]), test_data$temp)
 print("Evaluation metrics on test data:")
 print(evaluation)
+write.csv(evaluation, "evaluation_400e32b.csv")
 
 ```
 while performing regression(predicting temperature in this case), we use metrics like Mean Absolute Error (MAE) or Mean Squared Error (MSE) which are more relevant for evaluating the performance of the model as accuracy is not an appropriate metric for regression tasks.
