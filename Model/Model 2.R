@@ -1,6 +1,6 @@
 #open data
-file_path="C:/Users/권예은/Documents/Academic/Fall2023/Data mining/Final PJ/Fall2023_Datamining_Group3/data/maindata.csv"
-monthly_file_path="C:/Users/권예은/Documents/Academic/Fall2023/Data mining/Final PJ/Fall2023_Datamining_Group3/data/data_monthly.csv"
+file_path="../data/maindata.csv"
+monthly_file_path="../data/data_monthly.csv"
 data<-read.csv(file_path)
 monthly_data<-read.csv(monthly_file_path)
 
